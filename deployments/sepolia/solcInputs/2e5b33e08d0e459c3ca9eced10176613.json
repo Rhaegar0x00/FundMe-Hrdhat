@@ -1,0 +1,44 @@
+{
+  "language": "Solidity",
+  "sources": {
+    "@chainlink/contracts/src/v0.8/interfaces/AggregatorV3Interface.sol": {
+      "content": "// SPDX-License-Identifier: MIT\npragma solidity ^0.8.0;\n\ninterface AggregatorV3Interface {\n  function decimals() external view returns (uint8);\n\n  function description() external view returns (string memory);\n\n  function version() external view returns (uint256);\n\n  function getRoundData(uint80 _roundId)\n    external\n    view\n    returns (\n      uint80 roundId,\n      int256 answer,\n      uint256 startedAt,\n      uint256 updatedAt,\n      uint80 answeredInRound\n    );\n\n  function latestRoundData()\n    external\n    view\n    returns (\n      uint80 roundId,\n      int256 answer,\n      uint256 startedAt,\n      uint256 updatedAt,\n      uint80 answeredInRound\n    );\n}\n"
+    },
+    "contracts/Fundme.sol": {
+      "content": "// SPDX-License-Identifier: MIT\r\n\r\npragma solidity ^0.8.0;\r\n\r\nimport \"@chainlink/contracts/src/v0.8/interfaces/AggregatorV3Interface.sol\";\r\nimport \"./PriceConverter.sol\";\r\n\r\ncontract FundMe {\r\n    using PriceConvert for uint256;\r\n    mapping(address => uint256) public addressToAmountFunded;\r\n    address[] public funders;\r\n    address private immutable owner;\r\n    uint256 private minimumUSD = 5 * 10 ** 18;\r\n    AggregatorV3Interface public priceFeed;\r\n\r\n    constructor(address _pricefeed) public {\r\n        priceFeed = AggregatorV3Interface(\r\n            // 0x694AA1769357215DE4FAC081bf1f309aDC325306\r\n            _pricefeed\r\n        );\r\n        owner = msg.sender;\r\n    }\r\n\r\n    modifier onlyOwner() {\r\n        require(msg.sender == owner);\r\n        _;\r\n    }\r\n\r\n    function setMinimum(uint256 _minimumUSD) public onlyOwner {\r\n        require(_minimumUSD >= 100000000000000, \"Too small !\");\r\n        minimumUSD = _minimumUSD;\r\n    }\r\n\r\n    function getMinimum() public view returns (uint256) {\r\n        return minimumUSD;\r\n    }\r\n\r\n    function fund() public payable {\r\n        require(\r\n            msg.value.getConversionRate(priceFeed) >= minimumUSD,\r\n            \"You need to spend more ETH!\"\r\n        );\r\n        addressToAmountFunded[msg.sender] += msg.value;\r\n        funders.push(msg.sender);\r\n    }\r\n\r\n    function getVersion() public view returns (uint256) {\r\n        return priceFeed.version();\r\n    }\r\n\r\n    // 1000000000\r\n\r\n    function withdraw() public payable onlyOwner {\r\n        (bool success, ) = address(owner).call{value: address(this).balance}(\r\n            \"\"\r\n        );\r\n        require(success);\r\n        for (\r\n            uint256 funderIndex = 0;\r\n            funderIndex < funders.length;\r\n            funderIndex++\r\n        ) {\r\n            address funder = funders[funderIndex];\r\n            addressToAmountFunded[funder] = 0;\r\n        }\r\n        funders = new address[](0);\r\n    }\r\n\r\n    function getAddressToAmountFunded(\r\n        address fundingAddress\r\n    ) public view returns (uint256) {\r\n        return addressToAmountFunded[fundingAddress];\r\n    }\r\n\r\n    function getfunder(uint256 index) public view returns (address) {\r\n        return funders[index];\r\n    }\r\n\r\n    function getPriceFeed() public view returns (AggregatorV3Interface) {\r\n        return priceFeed;\r\n    }\r\n}\r\n"
+    },
+    "contracts/Lock.sol": {
+      "content": "// SPDX-License-Identifier: UNLICENSED\npragma solidity ^0.8.9;\n\n// Uncomment this line to use console.log\n// import \"hardhat/console.sol\";\n\ncontract Lock {\n    uint public unlockTime;\n    address payable public owner;\n\n    event Withdrawal(uint amount, uint when);\n\n    constructor(uint _unlockTime) payable {\n        require(\n            block.timestamp < _unlockTime,\n            \"Unlock time should be in the future\"\n        );\n\n        unlockTime = _unlockTime;\n        owner = payable(msg.sender);\n    }\n\n    function withdraw() public {\n        // Uncomment this line, and the import of \"hardhat/console.sol\", to print a log in your terminal\n        // console.log(\"Unlock time is %o and block timestamp is %o\", unlockTime, block.timestamp);\n\n        require(block.timestamp >= unlockTime, \"You can't withdraw yet\");\n        require(msg.sender == owner, \"You aren't the owner\");\n\n        emit Withdrawal(address(this).balance, block.timestamp);\n\n        owner.transfer(address(this).balance);\n    }\n}\n"
+    },
+    "contracts/PriceConverter.sol": {
+      "content": "// SPDX-License-Identifier: MIT\r\n\r\npragma solidity ^0.8.0;\r\n\r\nimport \"@chainlink/contracts/src/v0.8/interfaces/AggregatorV3Interface.sol\";\r\n\r\nlibrary PriceConvert {\r\n    function getPrice(\r\n        AggregatorV3Interface _pricefeed\r\n    ) internal view returns (uint256) {\r\n        (, int256 answer, , , ) = _pricefeed.latestRoundData();\r\n        return uint256(answer * 10000000000);\r\n    }\r\n\r\n    function getConversionRate(\r\n        uint256 ethAmount,\r\n        AggregatorV3Interface _priceFeed\r\n    ) internal view returns (uint256) {\r\n        uint256 price = getPrice(_priceFeed);\r\n        uint256 AmountUSD = (ethAmount * price) / 1000000000000000000;\r\n        return AmountUSD;\r\n    }\r\n}\r\n"
+    }
+  },
+  "settings": {
+    "optimizer": {
+      "enabled": false,
+      "runs": 200
+    },
+    "outputSelection": {
+      "*": {
+        "*": [
+          "abi",
+          "evm.bytecode",
+          "evm.deployedBytecode",
+          "evm.methodIdentifiers",
+          "metadata",
+          "devdoc",
+          "userdoc",
+          "storageLayout",
+          "evm.gasEstimates"
+        ],
+        "": [
+          "ast"
+        ]
+      }
+    },
+    "metadata": {
+      "useLiteralContent": true
+    }
+  }
+}
